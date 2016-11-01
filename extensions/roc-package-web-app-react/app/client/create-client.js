@@ -3,7 +3,6 @@
 /* eslint-disable global-require */
 import React from 'react';
 import ReactDOM from 'react-dom';
-import Router from 'react-router/lib/Router';
 import useRouterHistory from 'react-router/lib/useRouterHistory';
 import applyRouterMiddleware from 'react-router/lib/applyRouterMiddleware';
 import createHistory from 'history/lib/createBrowserHistory';
@@ -11,23 +10,15 @@ import { supportsHistory } from 'history/lib/DOMUtils';
 import debug from 'debug';
 import { useRedial } from 'react-router-redial';
 import useScroll from 'react-router-scroll/lib/useScroll';
+import compose from 'redux/lib/compose';
 
 import { rocConfig } from '../shared/universal-config';
+
+import renderToDOM from './render-to-dom';
 
 const clientDebug = debug('roc:client');
 
 const basename = ROC_PATH === '/' ? '' : ROC_PATH;
-
-function compose(funcs) {
-    if (funcs.length === 0) {
-        return (arg) => arg;
-    }
-
-    const last = funcs[funcs.length - 1];
-    const rest = funcs.slice(0, -1);
-    return (...args) => rest.reduceRight((composed, f) => f(composed), last(...args));
-}
-
 
 /**
  * Client entry point for React applications.
@@ -85,11 +76,6 @@ export default function createClient({ createRoutes, createStore, mountNode }) {
                 ? forceRefreshSetting()
                 : forceRefreshSetting,
         });
-
-        let initialLoading;
-        if (HAS_CLIENT_LOADING) {
-            initialLoading = require(ROC_CLIENT_LOADING).default;
-        }
 
         let routes;
         let locals = {};
@@ -160,29 +146,31 @@ export default function createClient({ createRoutes, createStore, mountNode }) {
             ));
         }
 
-        const finalComponent = compose(createComponent)(
-            <Router
-                history={history}
-                routes={routes}
-                render={applyRouterMiddleware(
-                    useScroll(),
-                    useRedial({
-                        locals,
-                        initialLoading,
-                        beforeTransition: rocConfig.runtime.fetch.client.beforeTransition,
-                        afterTransition: rocConfig.runtime.fetch.client.afterTransition,
-                        parallel: rocConfig.runtime.fetch.client.parallel,
-                    })
-                )}
-            />
-        );
-
-        ReactDOM.render(finalComponent, node);
+        let initialLoading;
+        if (HAS_CLIENT_LOADING) {
+            initialLoading = require(ROC_CLIENT_LOADING).default;
+        }
+        renderToDOM({
+            node,
+            createComponent: compose(...createComponent),
+            history,
+            routes,
+            routerRenderFn: applyRouterMiddleware(
+                useScroll(),
+                useRedial({
+                    locals,
+                    initialLoading,
+                    beforeTransition: rocConfig.runtime.fetch.client.beforeTransition,
+                    afterTransition: rocConfig.runtime.fetch.client.afterTransition,
+                    parallel: rocConfig.runtime.fetch.client.parallel,
+                })
+            ),
+        });
 
         if (__DEV__) {
             const devNode = document.createElement('div');
             node.parentNode.insertBefore(devNode, node.nextSibling);
-            ReactDOM.render(compose(createDevComponent)(null), devNode);
+            ReactDOM.render(compose(...createDevComponent)(null), devNode);
         }
     };
 
